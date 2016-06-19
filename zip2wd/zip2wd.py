@@ -12,6 +12,7 @@ import gzip
 import logging
 
 from datetime import datetime, timedelta
+from pkg_resources import resource_filename
 
 
 """Constants
@@ -49,9 +50,15 @@ class WeatherByZip(object):
 
     def __init__(self, args):
         self.args = args
-        with open(args.columns, 'rb') as f:
-            self.output_columns = [r.strip() for r in f.readlines()
-                                   if r[0] != '#']
+        try:
+            with open(args.columns, 'rb') as f:
+                self.output_columns = [r.strip() for r in f.readlines()
+                                       if r[0] != '#']
+        except:
+            args.columns = resource_filename(__name__, args.columns)
+            with open(args.columns, 'rb') as f:
+                self.output_columns = [r.strip() for r in f.readlines()
+                                       if r[0] != '#']
 
         self.stations = self.get_stations()
         logging.info('Number of Stations = {:d}'.format(len(self.stations)))

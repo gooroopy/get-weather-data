@@ -12,8 +12,9 @@ from multiprocessing.managers import SyncManager
 
 from zip2wd import WeatherByZip
 
+from pkg_resources import resource_filename
 
-DEFAULT_CONFIG_FILE = 'zip2wd.cfg'
+DEFAULT_CONFIG_FILE = resource_filename(__name__, 'zip2wd.cfg')
 LOG_FILE = 'zip2wd_worker.log'
 
 
@@ -143,8 +144,9 @@ def run_worker(args):
     mp_zip2wd(job_q, result_q, args)
 
 
-if __name__ == "__main__":
-    args = parse_command_line()
+def main(args=None):
+    if args is None:
+        args = parse_command_line()
 
     setup_logger(args.verbose)
 
@@ -152,3 +154,6 @@ if __name__ == "__main__":
     logging.info(str(args))
 
     run_worker(args)
+
+if __name__ == "__main__":
+    main()

@@ -7,13 +7,16 @@ import time
 import csv
 
 from ConfigParser import ConfigParser
-from multiprocessing import Queue
+from functools import partial
+from Queue import Queue as _Queue
+
 from multiprocessing.managers import SyncManager
 
 from zip2wd import STATION_INFO_COLS
 
+from pkg_resources import resource_filename
 
-DEFAULT_CONFIG_FILE = 'zip2wd.cfg'
+DEFAULT_CONFIG_FILE = resource_filename(__name__, 'zip2wd.cfg')
 DEF_OUTPUT_FILE = 'output.csv'
 LOG_FILE = 'zip2wd_manager.log'
 
@@ -79,23 +82,40 @@ def load_config(args=None):
     return args
 
 
-def make_server_manager(port, authkey):
+class Queue(_Queue):
+    """ A picklable queue. """
+    def __getstate__(self):
+        # Only pickle the state we care about
+        return (self.maxsize, self.queue, self.unfinished_tasks)
+
+    def __setstate__(self, state):
+        # Re-initialize the object, then overwrite the default state with
+        # our pickled state.
+        Queue.__init__(self)
+        self.maxsize = state[0]
+        self.queue = state[1]
+        self.unfinished_tasks = state[2]
+
+
+def get_q(q):
+    return q
+
+class JobQueueManager(SyncManager):
+    pass
+
+
+def make_server_manager(ip, port, authkey):
     """ Create a manager for the server, listening on the given port.
         Return a manager object with get_job_q and get_result_q methods.
     """
+
     job_q = Queue()
     result_q = Queue()
 
-    # This is based on the examples in the official docs of multiprocessing.
-    # get_{job|result}_q return synchronized proxies for the actual Queue
-    # objects.
-    class JobQueueManager(SyncManager):
-        pass
+    JobQueueManager.register('get_job_q', callable=partial(get_q, job_q))
+    JobQueueManager.register('get_result_q', callable=partial(get_q, result_q))
 
-    JobQueueManager.register('get_job_q', callable=lambda: job_q)
-    JobQueueManager.register('get_result_q', callable=lambda: result_q)
-
-    manager = JobQueueManager(address=('', port), authkey=authkey)
+    manager = JobQueueManager(address=(ip, port), authkey=authkey)
     manager.start()
     logging.info('Manager started at port {:d}'.format(port))
     return manager
@@ -103,12 +123,17 @@ def make_server_manager(port, authkey):
 
 def run_manager(args):
     # Start a shared manager server and access its queues
-    manager = make_server_manager(args.port, args.authkey)
+    manager = make_server_manager(args.ip, args.port, args.authkey)
     shared_job_q = manager.get_job_q()
     shared_result_q = manager.get_result_q()
 
-    with open(args.columns, 'rb') as f:
-        output_columns = [r.strip() for r in f.readlines() if r[0] != '#']
+    try:
+        with open(args.columns, 'rb') as f:
+            output_columns = [r.strip() for r in f.readlines() if r[0] != '#']
+    except:
+        args.columns = resource_filename(__name__, args.columns)
+        with open(args.columns, 'rb') as f:
+            output_columns = [r.strip() for r in f.readlines() if r[0] != '#']
 
     outfile = open(args.outfile, 'wb')
     writer = csv.DictWriter(outfile, fieldnames=['uniqid', 'zip', 'year',
@@ -154,20 +179,27 @@ def run_manager(args):
         # Wait until all results are ready in shared_result_q
         numresults = 0
         while numresults < N:
-            outdict = shared_result_q.get()
-            for v in outdict.values():
-                writer.writerows(v)
-            numresults += len(outdict)
-            logging.info("Progress: {:d}/{:d}".format(numresults, N))
-
+            try:
+                if not shared_result_q.empty():
+                    outdict = shared_result_q.get()
+                    for v in outdict.values():
+                        writer.writerows(v)
+                    numresults += len(outdict)
+                    logging.info("Progress: {:d}/{:d}".format(numresults, N))
+                else:
+                    time.sleep(0.1)
+            except KeyboardInterrupt:
+                break
     # Sleep a bit before shutting down the server - to give clients time to
     # realize the job queue is empty and exit in an orderly way.
     time.sleep(3)
     manager.shutdown()
     outfile.close()
 
-if __name__ == "__main__":
-    args = parse_command_line()
+
+def main(args=None):
+    if args is None:
+        args = parse_command_line()
 
     setup_logger(args.verbose)
 
@@ -175,3 +207,6 @@ if __name__ == "__main__":
     logging.info(str(args))
 
     run_manager(args)
+
+if __name__ == "__main__":
+    main()

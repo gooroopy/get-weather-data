@@ -12,15 +12,17 @@ import csv
 import pygeocoder
 from pygeocoder import Geocoder
 
+from pkg_resources import resource_filename
+
 """Script default configuration
 """
-SQLITE_DB_NAME      =   "zip2ws.sqlite"
-US_ZIP_LIST         =   "./inventories/free-zipcode-database-primary.csv"
-GHCND_STATIONS_LIST =   "./inventories/ghcnd-stations.txt"
-ASOS_STATIONS_LIST  =   "./inventories/asos-stations.txt"
-COOP_STATIONS_LIST  =   "./inventories/coop-act.txt"
-ISH_STATIONS_LIST   =   "./inventories/ish-history.csv"
-CSV_OUTPUT_FILE     =   "zip-stations.csv"
+SQLITE_DB_NAME      =   resource_filename(__name__, "data/zip2ws.sqlite")
+US_ZIP_LIST         =   resource_filename(__name__, "inventories/free-zipcode-database-primary.csv")
+GHCND_STATIONS_LIST =   resource_filename(__name__, "inventories/ghcnd-stations.txt")
+ASOS_STATIONS_LIST  =   resource_filename(__name__, "inventories/asos-stations.txt")
+COOP_STATIONS_LIST  =   resource_filename(__name__, "inventories/coop-act.txt")
+ISH_STATIONS_LIST   =   resource_filename(__name__, "inventories/ish-history.csv")
+CSV_OUTPUT_FILE     =   resource_filename(__name__, "data/zip-stations.csv")
 NO_GHCN             =   3
 NO_COOP             =   1
 NO_USAF             =   1
@@ -370,7 +372,6 @@ def updateClosestStations(options):
                 stations = getStations(options, a)
                 dist = sortedStationsDistance(lat1, lon1, stations)
                 for d in dist[:b]:
-                    #print d
                     c.execute("INSERT OR IGNORE INTO closest (zid, sid, distance) VALUES (?, ?, ?)", (zid, d[1], d[0]))
         conn.commit()
     conn.commit()
@@ -506,7 +507,16 @@ def parse_command_line(argv):
         
     return parser.parse_args(argv)
 
-def main(options, args):
+
+def main():
+    reload(sys)
+    sys.setdefaultencoding('utf-8')
+    sys.stdout = Logger()
+    signal.signal(signal.SIGINT, signal_handler)
+
+    print("{0!s} r3 (2013/07/07)\n".format((os.path.basename(sys.argv[0]))))
+    (options, args) = parse_command_line(sys.argv)
+
     if not os.path.exists(options.database) or options.importdb:
         importZip(options)
         importGHCND(options)
@@ -523,18 +533,11 @@ def main(options, args):
         updateClosestStations(options)
     if options.export:
         exportClosestStations(options)
-    
+
 def signal_handler(signal, frame):
     print 'You pressed Ctrl+C!'
     os._exit(1)
-    
+
 if __name__ == "__main__":
-    reload(sys)
-    sys.setdefaultencoding('utf-8')
-    sys.stdout = Logger()
-    signal.signal(signal.SIGINT, signal_handler)
-    
-    print("{0!s} r3 (2013/07/07)\n".format((os.path.basename(sys.argv[0]))))
-    (options, args) = parse_command_line(sys.argv)
-    main(options, args)
-    
+    main()
+

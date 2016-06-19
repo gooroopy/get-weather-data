@@ -252,13 +252,18 @@ def parse_command_line(argv):
                       help="CSV Output file name (default: {0!s})".format((CSV_OUTPUT_FILE)))
     return parser.parse_args(argv)
 
-if __name__ == "__main__":
+
+def main():
     (options, args) = parse_command_line(sys.argv)
     if len(args) < 2:
         print("Please specific input file")
     else:
         options.inputfile = args[1]
         load_save_csvfile(options.inputfile, options.outfile)
+
+
+if __name__ == "__main__":
+    main()
 
 #load_save_csvfile(samplein.csv', 'sampleout1.csv')
 # <cdoError>
