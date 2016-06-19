@@ -1,5 +1,8 @@
 .*
 !.gitignore
+!.travis.yml
 *.pyc
 *.log
-
+dist
+build
+*.egg-info
